@@ -301,6 +301,24 @@ def remember_category_for_transaction(transaction_id: int, category: str) -> int
         return cursor.rowcount
 
 
+def update_single_transaction_category(transaction_id: int, category: str) -> int:
+    """1件だけカテゴリを変更する。
+
+    Args:
+        transaction_id: 修正する明細ID。
+        category: 変更後カテゴリ。
+
+    Returns:
+        更新した件数。
+    """
+    with get_db() as connection:
+        cursor = connection.execute(
+            "UPDATE transactions SET category = %s WHERE id = %s",
+            (category, transaction_id),
+        )
+        return cursor.rowcount
+
+
 def save_missing_transactions(
     connection: psycopg.Connection,
     import_id: int,

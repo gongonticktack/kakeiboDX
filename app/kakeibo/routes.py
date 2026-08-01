@@ -19,6 +19,7 @@ from .services import (
     normalize_period_value,
     period_navigation,
     remember_category_for_transaction,
+    update_single_transaction_category,
 )
 
 bp = Blueprint("main", __name__)
@@ -325,6 +326,11 @@ def update_category(transaction_id: int):
     if category not in CATEGORIES:
         flash("カテゴリが正しくありません。", "error")
     else:
-        updated = remember_category_for_transaction(transaction_id, category)
-        flash(f"カテゴリを更新しました。似た店舗名を含めて{updated}件に反映しました。", "success")
+        apply_similar = request.form.get("apply_similar") == "1"
+        if apply_similar:
+            updated = remember_category_for_transaction(transaction_id, category)
+            flash(f"カテゴリを更新しました。似た店舗名を含めて{updated}件に反映しました。", "success")
+        else:
+            update_single_transaction_category(transaction_id, category)
+            flash("この明細だけカテゴリを更新しました。", "success")
     return redirect(request.referrer or url_for("main.dashboard"))

@@ -170,12 +170,17 @@
           <td>{{ row.used_at.strftime("%Y.%m.%d") }}{% if row.time_known %} {{ row.used_at.strftime("%H:%M") }}{% endif %}</td>
           <td>{{ row.merchant }}</td>
           <td>
-            <form method="post" action="{{ url_for('main.update_category', transaction_id=row.id) }}">
+            <form class="category-edit" method="post" action="{{ url_for('main.update_category', transaction_id=row.id) }}">
               <select name="category" onchange="this.form.submit()">
                 {% for category in categories %}
                   <option {{ 'selected' if category == row.category }}>{{ category }}</option>
                 {% endfor %}
               </select>
+              <label class="apply-similar-toggle" title="同じ店舗名の明細と今後の取込にも反映">
+                <input type="checkbox" name="apply_similar" value="1" checked>
+                <span></span>
+                <b>同項目変更</b>
+              </label>
             </form>
           </td>
           <td class="amount">¥{{ "{:,}".format(row.amount) }}</td>

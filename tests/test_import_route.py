@@ -230,3 +230,95 @@ def test_add_manual_transaction_rejects_invalid_category(monkeypatch, tmp_path: 
 
     assert response.status_code == 302
     assert not called
+
+
+def test_update_category_can_apply_to_similar_items(monkeypatch, tmp_path: Path) -> None:
+    """チェックありなら似た店舗名へカテゴリ変更を反映する。
+    Args:
+        monkeypatch: テスト中だけ関数を差し替える仕組み。
+        tmp_path: 一時保存先。
+    Returns:
+        なし。
+    """
+    called = {}
+
+    def fake_remember_category_for_transaction(transaction_id: int, category: str) -> int:
+        """学習あり更新の呼び出しを記録する。
+        Args:
+            transaction_id: 更新対象ID。
+            category: 変更後カテゴリ。
+        Returns:
+            更新件数。
+        """
+        called["remember"] = (transaction_id, category)
+        return 3
+
+    def fake_update_single_transaction_category(transaction_id: int, category: str) -> int:
+        """単独更新が呼ばれていないことを確認するための関数。
+        Args:
+            transaction_id: 更新対象ID。
+            category: 変更後カテゴリ。
+        Returns:
+            更新件数。
+        """
+        called["single"] = (transaction_id, category)
+        return 1
+
+    app = create_app({"TESTING": True, "UPLOAD_FOLDER": tmp_path})
+    monkeypatch.setattr(routes, "remember_category_for_transaction", fake_remember_category_for_transaction)
+    monkeypatch.setattr(routes, "update_single_transaction_category", fake_update_single_transaction_category)
+
+    response = app.test_client().post(
+        "/transactions/42/category",
+        data={"category": "食費", "apply_similar": "1"},
+    )
+
+    assert response.status_code == 302
+    assert called["remember"] == (42, "食費")
+    assert "single" not in called
+
+
+def test_update_category_can_change_only_one_item(monkeypatch, tmp_path: Path) -> None:
+    """チェックなしならその明細だけカテゴリ変更する。
+    Args:
+        monkeypatch: テスト中だけ関数を差し替える仕組み。
+        tmp_path: 一時保存先。
+    Returns:
+        なし。
+    """
+    called = {}
+
+    def fake_remember_category_for_transaction(transaction_id: int, category: str) -> int:
+        """学習あり更新が呼ばれていないことを確認するための関数。
+        Args:
+            transaction_id: 更新対象ID。
+            category: 変更後カテゴリ。
+        Returns:
+            更新件数。
+        """
+        called["remember"] = (transaction_id, category)
+        return 3
+
+    def fake_update_single_transaction_category(transaction_id: int, category: str) -> int:
+        """単独更新の呼び出しを記録する。
+        Args:
+            transaction_id: 更新対象ID。
+            category: 変更後カテゴリ。
+        Returns:
+            更新件数。
+        """
+        called["single"] = (transaction_id, category)
+        return 1
+
+    app = create_app({"TESTING": True, "UPLOAD_FOLDER": tmp_path})
+    monkeypatch.setattr(routes, "remember_category_for_transaction", fake_remember_category_for_transaction)
+    monkeypatch.setattr(routes, "update_single_transaction_category", fake_update_single_transaction_category)
+
+    response = app.test_client().post(
+        "/transactions/42/category",
+        data={"category": "食費"},
+    )
+
+    assert response.status_code == 302
+    assert called["single"] == (42, "食費")
+    assert "remember" not in called
