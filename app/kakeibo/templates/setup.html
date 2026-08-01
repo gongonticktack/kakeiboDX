@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}DBセットアップ | Kakeibo DX{% endblock %}
+{% block content %}
+<section class="setup-card">
+  <div class="setup-icon">DB</div>
+  <p class="eyebrow">FIRST SETUP</p>
+  <h1>PostgreSQLへの接続が必要です</h1>
+  <p class="muted"><code>config/config.json</code> に接続情報を設定してください。</p>
+  <pre>{"database":{"user":"ユーザー","password":"パスワード","host":"localhost","port":5432,"name":"kakeibo_dx"}}</pre>
+  <p class="error-detail">{{ db_message }}</p>
+  <form method="post" action="{{ url_for('main.setup_database') }}">
+    <button class="primary" type="submit">接続を再確認</button>
+  </form>
+  <form class="db-config-form" method="post" action="{{ url_for('main.update_database_config') }}">
+    <label>
+      <span>ユーザー名</span>
+      <input type="text" name="user" value="{{ db_settings.user }}" autocomplete="username" required>
+    </label>
+    <label>
+      <span>パスワード</span>
+      <input type="password" name="password" autocomplete="current-password" required>
+    </label>
+    <div class="db-config-row">
+      <label>
+        <span>ホスト</span>
+        <input type="text" name="host" value="{{ db_settings.host }}" required>
+      </label>
+      <label>
+        <span>ポート</span>
+        <input type="number" name="port" value="{{ db_settings.port }}" min="1" max="65535" required>
+      </label>
+    </div>
+    <label>
+      <span>データベース名</span>
+      <input type="text" name="database" value="{{ db_settings.database }}" required>
+    </label>
+    <button class="secondary" type="submit">接続情報を保存</button>
+  </form>
+</section>
+{% endblock %}

@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="hero">
+  <div>
+    <p class="eyebrow">MONEY OVERVIEW</p>
+    <h1>{{ data.label }}の支出</h1>
+    <p class="hero-total">¥{{ "{:,}".format(data.total) }}</p>
+    <p class="muted">{{ data.count }}件のカード利用を集計</p>
+  </div>
+  <form class="period-form" method="get">
+    <div class="segmented">
+      <button name="period" value="month" class="{{ 'active' if period == 'month' }}">月</button>
+      <button name="period" value="year" class="{{ 'active' if period == 'year' }}">年</button>
+      <button name="period" value="all" class="{{ 'active' if period == 'all' }}">累計</button>
+    </div>
+    {% if period == 'month' %}
+      <input type="month" name="value" value="{{ selected }}">
+    {% elif period == 'year' %}
+      <input type="number" name="value" value="{{ selected }}" min="2000" max="2100" placeholder="2026">
+    {% endif %}
+    <button class="secondary">表示</button>
+  </form>
+</section>
+
+<section class="import-panel">
+  <div>
+    <p class="eyebrow">PDF IMPORT</p>
+    <h2>カード明細を追加</h2>
+    <p class="muted">楽天カードの請求明細PDFから日付・店舗・金額・カテゴリを自動登録します。</p>
+  </div>
+  <form method="post" action="{{ url_for('main.import_pdf') }}" enctype="multipart/form-data">
+    <label class="file-picker">
+      <input type="file" name="statements" accept="application/pdf" multiple required>
+      <span>PDFを選択</span>
+    </label>
+    <button class="primary" type="submit">取り込む</button>
+  </form>
+</section>
+
+<div class="grid two">
+  <section class="card">
+    <div class="card-heading">
+      <div><p class="eyebrow">BREAKDOWN</p><h2>カテゴリ別支出</h2></div>
+    </div>
+    <div class="donut-layout">
+      <canvas id="categoryChart" width="280" height="280"></canvas>
+      <div id="categoryLegend" class="legend"></div>
+    </div>
+  </section>
+  <section class="card">
+    <p class="eyebrow">MONTHLY TREND</p>
+    <h2>月ごとの支出</h2>
+    <canvas id="monthlyChart" width="640" height="310"></canvas>
+  </section>
+</div>
+
+<section class="advice-section">
+  <div><p class="eyebrow">SMART SAVING</p><h2>今月の節約ヒント</h2></div>
+  <div class="advice-grid">
+    {% for item in data.advice %}
+      <article class="advice"><span>{{ loop.index|string }}.</span><p>{{ item }}</p></article>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="card transactions">
+  <div class="card-heading">
+    <div><p class="eyebrow">RECENT ACTIVITY</p><h2>最近の明細</h2></div>
+    <span class="muted">時刻が明細にない利用は日付のみ表示</span>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>利用日</th><th>利用会社</th><th>カテゴリ</th><th>金額</th></tr></thead>
+      <tbody>
+      {% for row in data.recent %}
+        <tr>
+          <td>{{ row.used_at.strftime("%Y.%m.%d") }}{% if row.time_known %} {{ row.used_at.strftime("%H:%M") }}{% endif %}</td>
+          <td>{{ row.merchant }}</td>
+          <td>
+            <form method="post" action="{{ url_for('main.update_category', transaction_id=row.id) }}">
+              <select name="category" onchange="this.form.submit()">
+                {% for category in categories %}
+                  <option {{ 'selected' if category == row.category }}>{{ category }}</option>
+                {% endfor %}
+              </select>
+            </form>
+          </td>
+          <td class="amount">¥{{ "{:,}".format(row.amount) }}</td>
+        </tr>
+      {% else %}
+        <tr><td colspan="4" class="empty">PDF明細を取り込むと、ここに利用履歴が表示されます。</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+window.KAKEIBO_DATA = {
+  categories: {{ categories_json|safe }},
+  monthly: {{ monthly_json|safe }}
+};
+</script>
+<script src="{{ url_for('static', filename='charts.js') }}"></script>
+{% endblock %}
