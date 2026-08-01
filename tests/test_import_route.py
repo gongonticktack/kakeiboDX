@@ -139,3 +139,94 @@ def test_import_pdf_keeps_failed_pdf(monkeypatch, tmp_path: Path) -> None:
     reports = list((tmp_path / "failed_uploads").glob("*_broken.txt"))
     assert len(reports) == 1
     assert "raw extracted text" in reports[0].read_text(encoding="utf-8")
+
+
+def test_add_manual_transaction_route(monkeypatch, tmp_path: Path) -> None:
+    """手動入力フォームから明細を追加できることを確認する。
+    Args:
+        monkeypatch: テスト中だけ関数を差し替える仕組み。
+        tmp_path: 一時保存先。
+    Returns:
+        なし。
+    """
+    saved = {}
+
+    def fake_add_manual_transaction(used_at, merchant, amount, category, payment_method):
+        """保存内容を記録する。
+        Args:
+            used_at: 利用日時。
+            merchant: 内容。
+            amount: 金額。
+            category: カテゴリ。
+            payment_method: 支払方法。
+        Returns:
+            偽の明細ID。
+        """
+        saved.update(
+            {
+                "used_at": used_at,
+                "merchant": merchant,
+                "amount": amount,
+                "category": category,
+                "payment_method": payment_method,
+            }
+        )
+        return 1
+
+    app = create_app({"TESTING": True, "UPLOAD_FOLDER": tmp_path})
+    monkeypatch.setattr(routes, "add_manual_transaction", fake_add_manual_transaction)
+
+    response = app.test_client().post(
+        "/manual",
+        data={
+            "used_on": "2026-06-30",
+            "merchant": "現金ランチ",
+            "amount": "980",
+            "category": "食費",
+            "payment_method": "現金",
+        },
+    )
+
+    assert response.status_code == 302
+    assert response.headers["Location"].endswith("/?period=month&value=2026-06")
+    assert saved["merchant"] == "現金ランチ"
+    assert saved["amount"] == 980
+    assert saved["category"] == "食費"
+    assert saved["payment_method"] == "現金"
+
+
+def test_add_manual_transaction_rejects_invalid_category(monkeypatch, tmp_path: Path) -> None:
+    """不正なカテゴリでは保存しないことを確認する。
+    Args:
+        monkeypatch: テスト中だけ関数を差し替える仕組み。
+        tmp_path: 一時保存先。
+    Returns:
+        なし。
+    """
+    app = create_app({"TESTING": True, "UPLOAD_FOLDER": tmp_path})
+    called = False
+
+    def fake_add_manual_transaction(*args):
+        """呼ばれたら失敗にする。
+        Args:
+            args: 保存引数。
+        Returns:
+            なし。
+        """
+        nonlocal called
+        called = True
+
+    monkeypatch.setattr(routes, "add_manual_transaction", fake_add_manual_transaction)
+
+    response = app.test_client().post(
+        "/manual",
+        data={
+            "used_on": "2026-06-30",
+            "merchant": "現金ランチ",
+            "amount": "980",
+            "category": "不正",
+        },
+    )
+
+    assert response.status_code == 302
+    assert not called

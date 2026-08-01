@@ -2,6 +2,7 @@
 
 import json
 import uuid
+from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -9,12 +10,45 @@ from flask import Blueprint, current_app, flash, redirect, render_template, requ
 from werkzeug.utils import secure_filename
 
 from .config import load_config, save_config
-from .db import check_connection, database_url, format_connection_error, get_db, init_schema
+from .db import check_connection, database_url, format_connection_error, init_schema
 from .parser import extract_pdf_text
-from .services import dashboard_data, import_statement
+from .services import (
+    add_manual_transaction,
+    dashboard_data,
+    import_statement,
+    normalize_period_value,
+    period_navigation,
+    remember_category_for_transaction,
+)
 
 bp = Blueprint("main", __name__)
-CATEGORIES = ("食費", "日用品", "娯楽", "固定費", "交通", "医療・健康", "自己投資", "資産形成", "衣服・美容", "その他")
+CATEGORIES = ("食費", "日用品", "娯楽", "固定費", "交通", "医療・健康", "自己投資", "資産形成", "衣服・美容", "税金", "その他")
+CATEGORY_COLORS = {
+    "食費": "#65f5cf",
+    "日用品": "#c3a07a",
+    "娯楽": "#f6d77b",
+    "固定費": "#35d6a9",
+    "交通": "#75d7ff",
+    "医療・健康": "#9bf28f",
+    "自己投資": "#8fc7ff",
+    "資産形成": "#b2f7d0",
+    "衣服・美容": "#ff9fc7",
+    "税金": "#d9a76b",
+    "その他": "#a9b5ad",
+}
+CATEGORY_BACKGROUNDS = {
+    "食費": "rgba(101,245,207,.12)",
+    "日用品": "rgba(195,160,122,.13)",
+    "娯楽": "rgba(246,215,123,.12)",
+    "固定費": "rgba(53,214,169,.13)",
+    "交通": "rgba(117,215,255,.12)",
+    "医療・健康": "rgba(155,242,143,.12)",
+    "自己投資": "rgba(143,199,255,.12)",
+    "資産形成": "rgba(178,247,208,.12)",
+    "衣服・美容": "rgba(255,159,199,.12)",
+    "税金": "rgba(217,167,107,.13)",
+    "その他": "rgba(169,181,173,.10)",
+}
 FAILED_UPLOAD_FOLDER = "failed_uploads"
 
 
@@ -113,16 +147,32 @@ def dashboard():
         )
     period = request.args.get("period", "month")
     selected = request.args.get("value")
-    data = dashboard_data(period, selected)
+    sort_key = request.args.get("sort", "date")
+    sort_dir = request.args.get("dir", "desc")
+    if sort_key not in {"date", "merchant", "category", "amount"}:
+        sort_key = "date"
+    if sort_dir not in {"asc", "desc"}:
+        sort_dir = "desc"
+    active_category = request.args.get("category") or None
+    if active_category not in CATEGORIES:
+        active_category = None
+    data = dashboard_data(period, selected, active_category, sort_key, sort_dir)
     return render_template(
         "dashboard.html",
         data=data,
         period=period,
-        selected=selected or "",
+        selected=normalize_period_value(period, selected),
+        active_category=active_category or "",
+        sort_key=sort_key,
+        sort_dir=sort_dir,
         categories_json=json.dumps(data["categories"], ensure_ascii=False),
         monthly_json=json.dumps(data["monthly"], ensure_ascii=False),
+        category_colors_json=json.dumps(CATEGORY_COLORS, ensure_ascii=False),
         categories=CATEGORIES,
+        category_colors=CATEGORY_COLORS,
+        category_backgrounds=CATEGORY_BACKGROUNDS,
         db_message=db_message,
+        period_nav=period_navigation(period, selected),
     )
 
 
@@ -226,6 +276,41 @@ def import_pdf():
     return redirect(url_for("main.dashboard", period="all"))
 
 
+@bp.post("/manual")
+def add_manual():
+    """手動入力された明細を保存する。
+
+    Args:
+        なし。
+
+    Returns:
+        入力日付の月表示へのリダイレクト。
+    """
+    used_on = request.form.get("used_on", "").strip()
+    merchant = request.form.get("merchant", "").strip()
+    amount_text = request.form.get("amount", "").replace(",", "").strip()
+    category = request.form.get("category", "")
+    payment_method = request.form.get("payment_method", "").strip() or "手動入力"
+    if not used_on or not merchant or not amount_text:
+        flash("日付、内容、金額を入力してください。", "error")
+        return redirect(request.referrer or url_for("main.dashboard"))
+    if category not in CATEGORIES:
+        flash("カテゴリが正しくありません。", "error")
+        return redirect(request.referrer or url_for("main.dashboard"))
+    try:
+        used_at = datetime.strptime(used_on, "%Y-%m-%d")
+        amount = int(amount_text)
+    except ValueError:
+        flash("日付または金額の形式が正しくありません。", "error")
+        return redirect(request.referrer or url_for("main.dashboard"))
+    if amount <= 0:
+        flash("金額は1円以上で入力してください。", "error")
+        return redirect(request.referrer or url_for("main.dashboard"))
+    add_manual_transaction(used_at, merchant, amount, category, payment_method)
+    flash("手動明細を追加しました。", "success")
+    return redirect(url_for("main.dashboard", period="month", value=used_on[:7]))
+
+
 @bp.post("/transactions/<int:transaction_id>/category")
 def update_category(transaction_id: int):
     """明細カテゴリを手動修正する。
@@ -240,10 +325,6 @@ def update_category(transaction_id: int):
     if category not in CATEGORIES:
         flash("カテゴリが正しくありません。", "error")
     else:
-        with get_db() as connection:
-            connection.execute(
-                "UPDATE transactions SET category = %s WHERE id = %s",
-                (category, transaction_id),
-            )
-        flash("カテゴリを更新しました。", "success")
+        updated = remember_category_for_transaction(transaction_id, category)
+        flash(f"カテゴリを更新しました。似た店舗名を含めて{updated}件に反映しました。", "success")
     return redirect(request.referrer or url_for("main.dashboard"))

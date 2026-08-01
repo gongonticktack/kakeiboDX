@@ -139,6 +139,12 @@ def init_schema() -> None:
     );
     CREATE INDEX IF NOT EXISTS idx_transactions_used_at ON transactions(used_at);
     CREATE INDEX IF NOT EXISTS idx_transactions_category ON transactions(category);
+    CREATE TABLE IF NOT EXISTS category_rules (
+        merchant_key TEXT PRIMARY KEY,
+        category TEXT NOT NULL,
+        sample_merchant TEXT NOT NULL,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
     """
     try:
         with get_db() as connection:

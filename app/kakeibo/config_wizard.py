@@ -3,7 +3,7 @@
 import getpass
 from typing import Callable
 
-from .config import default_config, save_config
+from .config import default_config, random_application_port, save_config
 
 
 def ask_text(
@@ -47,30 +47,6 @@ def ask_int(
         if answer.isdigit():
             return int(answer)
         print("Please enter a number.")
-
-
-def ask_optional_int(
-    prompt: str,
-    default_label: str,
-    input_func: Callable[[str], str] = input,
-) -> int | None:
-    """未指定も許す整数の設定値を質問する。
-
-    Args:
-        prompt: 画面に表示する質問文。
-        default_label: 空入力時の説明。
-        input_func: 入力を受け取る関数。
-
-    Returns:
-        入力された整数。空ならNone。
-    """
-    while True:
-        answer = input_func(f"{prompt} [{default_label}]: ").strip()
-        if not answer:
-            return None
-        if answer.isdigit():
-            return int(answer)
-        print("Please enter a number, or press Enter for auto.")
 
 
 def ask_bool(
@@ -128,8 +104,8 @@ def build_config(
 
     print("")
     print("Web server settings")
-    server_host = ask_text("Server host", "127.0.0.1", input_func)
-    server_port = ask_optional_int("Server port", "auto", input_func)
+    server_host = ask_text("Server host", "0.0.0.0", input_func)
+    server_port = ask_int("Server port", random_application_port(), input_func)
     debug = ask_bool("Debug mode", True, input_func)
     open_browser = ask_bool("Open browser automatically", True, input_func)
 

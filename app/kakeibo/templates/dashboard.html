@@ -8,6 +8,9 @@
     <p class="muted">{{ data.count }}件のカード利用を集計</p>
   </div>
   <form class="period-form" method="get">
+    {% if period_nav %}
+      <a class="icon-link" href="{{ url_for('main.dashboard', period=period, value=period_nav.previous) }}" title="前へ">‹</a>
+    {% endif %}
     <div class="segmented">
       <button name="period" value="month" class="{{ 'active' if period == 'month' }}">月</button>
       <button name="period" value="year" class="{{ 'active' if period == 'year' }}">年</button>
@@ -19,23 +22,56 @@
       <input type="number" name="value" value="{{ selected }}" min="2000" max="2100" placeholder="2026">
     {% endif %}
     <button class="secondary">表示</button>
+    {% if period_nav %}
+      <a class="icon-link" href="{{ url_for('main.dashboard', period=period, value=period_nav.next) }}" title="次へ">›</a>
+    {% endif %}
   </form>
 </section>
 
 <section class="import-panel">
   <div>
-    <p class="eyebrow">PDF IMPORT</p>
-    <h2>カード明細を追加</h2>
-    <p class="muted">楽天カードの請求明細PDFから日付・店舗・金額・カテゴリを自動登録します。</p>
+    <p class="eyebrow">ADD RECORDS</p>
+    <h2>追加</h2>
+    <p class="muted">PDF取込と手入力のどちらからでも明細を追加できます。</p>
   </div>
-  <form method="post" action="{{ url_for('main.import_pdf') }}" enctype="multipart/form-data">
-    <label class="file-picker">
-      <input type="file" name="statements" accept="application/pdf" multiple required>
-      <span>PDFを選択</span>
-    </label>
-    <button class="primary" type="submit">取り込む</button>
-  </form>
+  <div class="add-actions">
+    <form method="post" action="{{ url_for('main.import_pdf') }}" enctype="multipart/form-data">
+      <label class="file-picker">
+        <input type="file" name="statements" accept="application/pdf" multiple required>
+        <span>カード明細PDFを選択</span>
+      </label>
+      <button class="primary" type="submit">PDF取込</button>
+    </form>
+    <button class="secondary" type="button" id="openManualModal">手入力で追加</button>
+  </div>
 </section>
+
+<div class="modal-backdrop" id="manualModal" hidden>
+  <section class="modal modal-narrow">
+    <div class="modal-heading">
+      <div>
+        <p class="eyebrow">MANUAL ENTRY</p>
+        <h2>手入力で追加</h2>
+        <p class="muted">現金払いやPDFに載らない支出を追加します。</p>
+      </div>
+      <button class="modal-close" type="button" id="closeManualModal" aria-label="閉じる">×</button>
+    </div>
+    <form class="manual-form" method="post" action="{{ url_for('main.add_manual') }}">
+      <label>日付<input type="date" name="used_on" required></label>
+      <label>内容・店舗名<input type="text" name="merchant" placeholder="例: 現金ランチ" required></label>
+      <label>金額<input type="number" name="amount" min="1" step="1" placeholder="980" required></label>
+      <label>カテゴリ
+        <select name="category" required>
+          {% for category in categories %}
+            <option>{{ category }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>支払方法<input type="text" name="payment_method" placeholder="現金"></label>
+      <button class="primary" type="submit">追加する</button>
+    </form>
+  </section>
+</div>
 
 <div class="grid two">
   <section class="card">
@@ -55,7 +91,12 @@
 </div>
 
 <section class="advice-section">
-  <div><p class="eyebrow">SMART SAVING</p><h2>今月の節約ヒント</h2></div>
+  <div class="section-heading-row">
+    <div><p class="eyebrow">SMART SAVING</p><h2>今月の節約ヒント</h2></div>
+    {% if period != 'all' %}
+      <button class="secondary" type="button" id="openAverageModal">平均との差を見る</button>
+    {% endif %}
+  </div>
   <div class="advice-grid">
     {% for item in data.advice %}
       <article class="advice"><span>{{ loop.index|string }}.</span><p>{{ item }}</p></article>
@@ -63,17 +104,69 @@
   </div>
 </section>
 
+{% if period != 'all' %}
+  <div class="modal-backdrop" id="averageModal" hidden>
+    <section class="modal">
+      <div class="modal-heading">
+        <div>
+          <p class="eyebrow">AVERAGE CHECK</p>
+          <h2>カテゴリごとの差額</h2>
+          <p class="muted">{{ data.average_source }}</p>
+          <p class="muted">{{ data.average_insights[0] }}</p>
+        </div>
+        <button class="modal-close" type="button" id="closeAverageModal" aria-label="閉じる">×</button>
+      </div>
+      <canvas id="averageChart" width="840" height="360"></canvas>
+      <div class="average-list">
+        {% for row in data.average_comparison %}
+          <div class="average-row">
+            <span>{{ row.category }}</span>
+            <b>{{ "{:+,}".format(row.difference) }}円</b>
+            <small>支出 ¥{{ "{:,}".format(row.amount) }} / 平均 ¥{{ "{:,}".format(row.average) }}</small>
+          </div>
+        {% endfor %}
+      </div>
+    </section>
+  </div>
+{% endif %}
+
 <section class="card transactions">
   <div class="card-heading">
-    <div><p class="eyebrow">RECENT ACTIVITY</p><h2>最近の明細</h2></div>
-    <span class="muted">時刻が明細にない利用は日付のみ表示</span>
+    <div>
+      <p class="eyebrow">RECENT ACTIVITY</p>
+      <h2>最近の明細</h2>
+      {% if active_category %}
+        <p class="muted">「{{ active_category }}」で絞り込み中</p>
+      {% endif %}
+    </div>
+    {% if active_category %}
+      <a class="filter-clear" href="{{ url_for('main.dashboard', period=period, value=selected) }}">解除</a>
+    {% else %}
+      <span class="muted">時刻が明細にない利用は日付のみ表示</span>
+    {% endif %}
   </div>
   <div class="table-wrap">
+    {% macro sort_link(key, label) -%}
+      {%- set next_dir = 'asc' if sort_key == key and sort_dir == 'desc' else 'desc' -%}
+      <a class="sort-link {{ 'active' if sort_key == key }}" href="{{ url_for('main.dashboard', period=period, value=selected, category=active_category, sort=key, dir=next_dir) }}">
+        <span>{{ label }}</span>
+        {% if sort_key == key %}
+          <b>{{ '↓' if sort_dir == 'desc' else '↑' }}</b>
+        {% endif %}
+      </a>
+    {%- endmacro %}
     <table>
-      <thead><tr><th>利用日</th><th>利用会社</th><th>カテゴリ</th><th>金額</th></tr></thead>
+      <thead>
+        <tr>
+          <th>{{ sort_link('date', '利用日') }}</th>
+          <th>{{ sort_link('merchant', '利用会社') }}</th>
+          <th>{{ sort_link('category', 'カテゴリ') }}</th>
+          <th>{{ sort_link('amount', '金額') }}</th>
+        </tr>
+      </thead>
       <tbody>
       {% for row in data.recent %}
-        <tr>
+        <tr style="--category-color: {{ category_colors.get(row.category, category_colors.get('その他')) }}; background-color: {{ category_backgrounds.get(row.category, category_backgrounds.get('その他')) }};">
           <td>{{ row.used_at.strftime("%Y.%m.%d") }}{% if row.time_known %} {{ row.used_at.strftime("%H:%M") }}{% endif %}</td>
           <td>{{ row.merchant }}</td>
           <td>
@@ -99,7 +192,11 @@
 <script>
 window.KAKEIBO_DATA = {
   categories: {{ categories_json|safe }},
-  monthly: {{ monthly_json|safe }}
+  monthly: {{ monthly_json|safe }},
+  categoryColors: {{ category_colors_json|safe }},
+  averageComparison: {{ data.average_comparison|tojson }},
+  period: {{ period|tojson }},
+  selected: {{ selected|tojson }}
 };
 </script>
 <script src="{{ url_for('static', filename='charts.js') }}"></script>

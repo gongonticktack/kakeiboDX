@@ -1,6 +1,7 @@
 """JSON設定の読み書きをまとめる。"""
 
 import json
+import random
 import secrets
 from pathlib import Path
 from urllib.parse import quote
@@ -8,6 +9,20 @@ from urllib.parse import quote
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 CONFIG_PATH = PROJECT_ROOT / "config" / "config.json"
+RANDOM_PORT_MIN = 49152
+RANDOM_PORT_MAX = 65535
+
+
+def random_application_port() -> int:
+    """有名ポートを避けたアプリ用ポートを作る。
+
+    Args:
+        なし。
+
+    Returns:
+        高番台のランダムなポート番号。
+    """
+    return random.randint(RANDOM_PORT_MIN, RANDOM_PORT_MAX)
 
 
 def default_config() -> dict:
@@ -28,8 +43,8 @@ def default_config() -> dict:
             "name": "kakeibo_dx",
         },
         "server": {
-            "host": "127.0.0.1",
-            "port": None,
+            "host": "0.0.0.0",
+            "port": random_application_port(),
             "debug": True,
             "open_browser": True,
         },
@@ -88,6 +103,22 @@ def save_config(config: dict) -> None:
         json.dumps(config, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
     )
+
+
+def ensure_fixed_server_port(config: dict) -> tuple[dict, bool]:
+    """サーバーポート未設定なら固定ランダム値を入れる。
+
+    Args:
+        config: アプリ設定。
+
+    Returns:
+        更新後の設定と、保存が必要ならTrue。
+    """
+    server = config.setdefault("server", {})
+    if server.get("port") in {None, 0, ""}:
+        server["port"] = random_application_port()
+        return config, True
+    return config, False
 
 
 def database_url(config: dict | None = None) -> str:

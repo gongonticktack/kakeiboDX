@@ -56,3 +56,31 @@ def test_database_url_encodes_json_config(monkeypatch, tmp_path: Path) -> None:
         config.database_url()
         == "postgresql://postgres:p%40ss%2Fword@127.0.0.1:5433/kakeibo_dx"
     )
+
+
+def test_ensure_fixed_server_port_sets_random_once(monkeypatch) -> None:
+    """未設定ポートへ固定ランダム値を入れることを確認する。
+    Args:
+        monkeypatch: テスト中だけランダム値を差し替える仕組み。
+    Returns:
+        なし。
+    """
+    monkeypatch.setattr(config, "random_application_port", lambda: 61234)
+
+    updated, changed = config.ensure_fixed_server_port({"server": {"port": None}})
+
+    assert changed is True
+    assert updated["server"]["port"] == 61234
+
+
+def test_ensure_fixed_server_port_keeps_existing_port() -> None:
+    """既存ポートは変更しないことを確認する。
+    Args:
+        なし。
+    Returns:
+        なし。
+    """
+    updated, changed = config.ensure_fixed_server_port({"server": {"port": 61234}})
+
+    assert changed is False
+    assert updated["server"]["port"] == 61234

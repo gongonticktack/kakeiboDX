@@ -2,6 +2,8 @@
 
 from unittest.mock import patch
 
+import pytest
+
 from kakeibo.__main__ import choose_port, display_url, local_ip_address, open_browser_later
 
 
@@ -28,20 +30,19 @@ def test_choose_port_keeps_configured_port() -> None:
     assert choose_port(5050) == 5050
 
 
-def test_choose_port_auto_selects_available_port() -> None:
-    """未指定時は有効な空きポート番号を選ぶことを確認する。
+def test_choose_port_requires_configured_port() -> None:
+    """未設定のままでは起動しないことを確認する。
     Args:
         なし。
     Returns:
         なし。
     """
-    port = choose_port(None)
+    with pytest.raises(ValueError):
+        choose_port(None)
 
-    assert 0 < port <= 65535
 
-
-def test_display_url_uses_local_ip_for_loopback(monkeypatch) -> None:
-    """ローカル待受時は自身のIPを表示することを確認する。
+def test_display_url_uses_local_ip_for_all_interfaces(monkeypatch) -> None:
+    """全インターフェース待受時は自身のIPを表示することを確認する。
     Args:
         monkeypatch: テスト中だけIP取得を差し替える仕組み。
     Returns:
@@ -49,7 +50,7 @@ def test_display_url_uses_local_ip_for_loopback(monkeypatch) -> None:
     """
     monkeypatch.setattr("kakeibo.__main__.local_ip_address", lambda: "192.168.1.23")
 
-    assert display_url("127.0.0.1", 5050) == "http://192.168.1.23:5050/"
+    assert display_url("0.0.0.0", 5050) == "http://192.168.1.23:5050/"
 
 
 def test_display_url_keeps_explicit_host() -> None:

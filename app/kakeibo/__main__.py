@@ -6,7 +6,7 @@ import threading
 import webbrowser
 
 from . import create_app
-from .config import load_config
+from .config import ensure_fixed_server_port, load_config, save_config
 
 
 def open_browser_later(url: str, delay_seconds: float = 1.0) -> None:
@@ -41,19 +41,17 @@ def env_bool(name: str, default: bool) -> bool:
 
 
 def choose_port(configured_port: int | None) -> int:
-    """起動に使うポート番号を決める。
+    """起動に使う固定ポート番号を決める。
 
     Args:
-        configured_port: JSON設定のポート番号。未指定または0なら自動選択。
+        configured_port: JSON設定のポート番号。
 
     Returns:
         Webサーバーで使うポート番号。
     """
     if configured_port:
         return int(configured_port)
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-        sock.bind(("127.0.0.1", 0))
-        return int(sock.getsockname()[1])
+    raise ValueError("server.port is not configured.")
 
 
 def local_ip_address() -> str:
@@ -83,7 +81,7 @@ def display_url(host: str, port: int) -> str:
     Returns:
         ブラウザで開けるURL。
     """
-    display_host = local_ip_address() if host in {"127.0.0.1", "0.0.0.0", "::"} else host
+    display_host = local_ip_address() if host in {"0.0.0.0", "::"} else host
     return f"http://{display_host}:{port}/"
 
 
@@ -97,18 +95,21 @@ def main() -> None:
         なし。
     """
     config = load_config()
+    config, changed = ensure_fixed_server_port(config)
+    if changed:
+        save_config(config)
     server = config["server"]
     app = create_app()
     host = server["host"]
     port = choose_port(server.get("port"))
     debug = bool(server["debug"])
     url = display_url(host, port)
-    print(f"Kakeibo DX: {url}", flush=True)
     should_open_browser = env_bool("OPEN_BROWSER", bool(server["open_browser"]))
+    is_serving_process = not debug or os.getenv("WERKZEUG_RUN_MAIN") == "true"
+    if is_serving_process:
+        print(f"Kakeibo DX: {url}", flush=True)
     # デバッグ再起動時にブラウザが2枚開くのを防ぐ。
-    if should_open_browser and (
-        not debug or os.getenv("WERKZEUG_RUN_MAIN") == "true"
-    ):
+    if should_open_browser and is_serving_process:
         open_browser_later(url)
     app.run(
         host=host,
