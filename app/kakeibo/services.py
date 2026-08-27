@@ -468,6 +468,54 @@ SORT_COLUMNS = {
 }
 
 
+def group_transactions(rows: list[dict], sort_key: str, sort_dir: str) -> list[dict]:
+    """同じ利用会社の明細を1行にまとめる。
+
+    Args:
+        rows: 明細一覧。
+        sort_key: 明細一覧のソート項目。
+        sort_dir: ascまたはdesc。
+
+    Returns:
+        利用会社ごとに集約した明細一覧。
+    """
+    grouped_rows: dict[str, dict] = {}
+    for row in rows:
+        merchant = row["merchant"].split(" ", 1)[0]
+        grouped_row = grouped_rows.get(merchant)
+        if grouped_row is None:
+            grouped_rows[merchant] = {
+                "id": row["id"],
+                "used_at": row["used_at"],
+                "time_known": False,
+                "merchant": merchant,
+                "amount": int(row["amount"]),
+                "category": row["category"],
+                "count": 1,
+                "categories": {row["category"]},
+            }
+            continue
+        grouped_row["amount"] += int(row["amount"])
+        grouped_row["count"] += 1
+        grouped_row["categories"].add(row["category"])
+        grouped_row["category"] = (
+            next(iter(grouped_row["categories"]))
+            if len(grouped_row["categories"]) == 1
+            else "複数"
+        )
+    result = list(grouped_rows.values())
+    for row in result:
+        row.pop("categories")
+    sort_field = {
+        "date": "used_at",
+        "merchant": "merchant",
+        "category": "category",
+        "amount": "amount",
+    }.get(sort_key, "used_at")
+    result.sort(key=lambda row: row[sort_field], reverse=sort_dir != "asc")
+    return result
+
+
 def refresh_other_categories() -> int:
     """その他の明細を現在の分類ルールで再判定する。
 
@@ -501,6 +549,7 @@ def dashboard_data(
     category_filter: str | None = None,
     sort_key: str = "date",
     sort_dir: str = "desc",
+    grouped: bool = False,
 ) -> dict:
     """指定期間のダッシュボード用集計を返す。
 
@@ -510,6 +559,7 @@ def dashboard_data(
         category_filter: 明細だけを絞り込むカテゴリ。
         sort_key: 明細一覧のソート項目。
         sort_dir: ascまたはdesc。
+        grouped: 同じ利用会社の明細をまとめるかどうか。
 
     Returns:
         合計、カテゴリ、月別推移、助言を含む辞書。
@@ -559,7 +609,8 @@ def dashboard_data(
         "count": total_row["count"],
         "categories": [dict(row) for row in categories],
         "monthly": [dict(row) for row in monthly],
-        "recent": recent,
+        "recent": group_transactions(recent, sort_key, sort_dir) if grouped else recent,
+        "grouped": grouped,
         "advice": advice,
         "average_insights": average_insights,
         "average_comparison": average_comparison,

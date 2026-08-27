@@ -154,10 +154,11 @@ def dashboard():
         sort_key = "date"
     if sort_dir not in {"asc", "desc"}:
         sort_dir = "desc"
+    grouped = request.args.get("grouped") == "1"
     active_category = request.args.get("category") or None
     if active_category not in CATEGORIES:
         active_category = None
-    data = dashboard_data(period, selected, active_category, sort_key, sort_dir)
+    data = dashboard_data(period, selected, active_category, sort_key, sort_dir, grouped)
     return render_template(
         "dashboard.html",
         data=data,
@@ -166,6 +167,7 @@ def dashboard():
         active_category=active_category or "",
         sort_key=sort_key,
         sort_dir=sort_dir,
+        grouped=grouped,
         categories_json=json.dumps(data["categories"], ensure_ascii=False),
         monthly_json=json.dumps(data["monthly"], ensure_ascii=False),
         category_colors_json=json.dumps(CATEGORY_COLORS, ensure_ascii=False),

@@ -139,11 +139,14 @@
         <p class="muted">「{{ active_category }}」で絞り込み中</p>
       {% endif %}
     </div>
-    {% if active_category %}
-      <a class="filter-clear" href="{{ url_for('main.dashboard', period=period, value=selected) }}">解除</a>
-    {% else %}
-      <span class="muted">時刻が明細にない利用は日付のみ表示</span>
-    {% endif %}
+    <div class="transaction-tools">
+      {% if active_category %}
+        <a class="filter-clear" href="{{ url_for('main.dashboard', period=period, value=selected, grouped='1' if grouped else None) }}">解除</a>
+      {% else %}
+        <span class="muted">時刻が明細にない利用は日付のみ表示</span>
+      {% endif %}
+      <a class="secondary" href="{{ url_for('main.dashboard', period=period, value=selected, category=active_category, sort=sort_key, dir=sort_dir, grouped=None if grouped else '1') }}">{{ '通常表示' if grouped else '項目まとめ表示' }}</a>
+    </div>
   </div>
   <div class="table-wrap">
     {% macro sort_link(key, label) -%}
@@ -167,9 +170,12 @@
       <tbody>
       {% for row in data.recent %}
         <tr style="--category-color: {{ category_colors.get(row.category, category_colors.get('その他')) }}; background-color: {{ category_backgrounds.get(row.category, category_backgrounds.get('その他')) }};">
-          <td>{{ row.used_at.strftime("%Y.%m.%d") }}{% if row.time_known %} {{ row.used_at.strftime("%H:%M") }}{% endif %}</td>
+          <td>{% if not grouped %}{{ row.used_at.strftime("%Y.%m.%d") }}{% if row.time_known %} {{ row.used_at.strftime("%H:%M") }}{% endif %}{% else %}-{% endif %}</td>
           <td>{{ row.merchant }}</td>
           <td>
+            {% if grouped %}
+              {{ row.category }}{% if row.count > 1 %}<small> ({{ row.count }}件)</small>{% endif %}
+            {% else %}
             <form class="category-edit" method="post" action="{{ url_for('main.update_category', transaction_id=row.id) }}">
               <select name="category" onchange="this.form.submit()">
                 {% for category in categories %}
@@ -182,6 +188,7 @@
                 <b>同項目変更</b>
               </label>
             </form>
+            {% endif %}
           </td>
           <td class="amount">¥{{ "{:,}".format(row.amount) }}</td>
         </tr>
@@ -201,7 +208,8 @@ window.KAKEIBO_DATA = {
   categoryColors: {{ category_colors_json|safe }},
   averageComparison: {{ data.average_comparison|tojson }},
   period: {{ period|tojson }},
-  selected: {{ selected|tojson }}
+  selected: {{ selected|tojson }},
+  activeCategory: {{ active_category|tojson }}
 };
 </script>
 <script src="{{ url_for('static', filename='charts.js') }}"></script>

@@ -9,6 +9,14 @@
     return data.categoryColors?.[row.category] || fallbackColors[index % fallbackColors.length];
   }
 
+  function dimColor(color) {
+    const value = color.replace("#", "");
+    const red = parseInt(value.slice(0, 2), 16);
+    const green = parseInt(value.slice(2, 4), 16);
+    const blue = parseInt(value.slice(4, 6), 16);
+    return `rgba(${red}, ${green}, ${blue}, .22)`;
+  }
+
   function moveTo(params) {
     const url = new URL(window.location.href);
     Object.entries(params).forEach(([key, value]) => {
@@ -30,8 +38,10 @@
     const ctx = canvas.getContext("2d");
     const ratio = window.devicePixelRatio || 1;
     const size = Math.min(canvas.clientWidth || 280, 280);
-    canvas.width = size * ratio; canvas.height = size * ratio;
-    ctx.scale(ratio, ratio);
+    canvas.width = size * ratio;
+    canvas.height = size * ratio;
+    ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+    ctx.clearRect(0, 0, size, size);
     const total = rows.reduce((sum, row) => sum + Number(row.amount), 0);
     const center = size / 2;
     if (!total) {
@@ -40,15 +50,27 @@
       ctx.fillStyle = "#77807c"; ctx.textAlign = "center"; ctx.font = "14px sans-serif";
       ctx.fillText("データなし", center, center + 5); return;
     }
+    const gradientStops = [];
     let angle = -Math.PI / 2;
     const areas = [];
+    let percent = 0;
     rows.forEach((row, index) => {
       const next = angle + (Number(row.amount) / total) * Math.PI * 2;
-      ctx.beginPath(); ctx.strokeStyle = categoryColor(row, index); ctx.lineWidth = 36;
-      ctx.arc(center, center, size * .31, angle + .01, next - .01); ctx.stroke();
-      areas.push({type: "donut", start: angle, end: next, inner: size * .31 - 22, outer: size * .31 + 22, row});
+      const nextPercent = percent + Number(row.amount) / total * 100;
+      const color = data.activeCategory && data.activeCategory !== row.category
+        ? dimColor(categoryColor(row, index))
+        : categoryColor(row, index);
+      gradientStops.push(`${color} ${percent}% ${nextPercent}%`);
+      areas.push({type: "donut", start: angle, end: next, inner: size * .21, outer: size * .43, row});
       angle = next;
+      percent = nextPercent;
     });
+    canvas.style.borderRadius = "50%";
+    canvas.style.background = `conic-gradient(from -90deg, ${gradientStops.join(", ")})`;
+    ctx.beginPath();
+    ctx.fillStyle = "#08100e";
+    ctx.arc(center, center, size * .21, 0, Math.PI * 2);
+    ctx.fill();
     hitAreas.set(canvas, areas);
     ctx.fillStyle = "#f5fff9"; ctx.textAlign = "center"; ctx.font = "700 21px sans-serif";
     ctx.fillText(yen(total), center, center + 4);
@@ -57,7 +79,7 @@
 
   function legend(target, rows) {
     target.innerHTML = rows.map((row, index) => `
-      <div class="legend-row"><i style="background:${categoryColor(row, index)}"></i>
+      <div class="legend-row ${data.activeCategory === row.category ? "selected" : ""}"><i style="background:${categoryColor(row, index)}"></i>
       <span>${row.category}</span><b>${yen(row.amount)}</b></div>`).join("") || "<p class='muted'>データがありません</p>";
     [...target.querySelectorAll(".legend-row")].forEach((element, index) => {
       element.style.cursor = "pointer";
@@ -120,7 +142,7 @@
           let angle = Math.atan2(dy, dx);
           if (angle < -Math.PI / 2) angle += Math.PI * 2;
           if (distance >= area.inner && distance <= area.outer && angle >= area.start && angle <= area.end) {
-            moveTo({category: area.row.category});
+            moveTo({category: data.activeCategory === area.row.category ? "" : area.row.category, sort: "date", dir: "desc"});
             return;
           }
         }

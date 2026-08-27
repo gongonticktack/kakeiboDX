@@ -8,6 +8,7 @@ from kakeibo.services import (
     build_average_insights,
     build_advice,
     floor_to_hundreds,
+    group_transactions,
     merchant_key,
     normalize_period_value,
     period_navigation,
@@ -18,6 +19,43 @@ from kakeibo.services import (
     transaction_match_counts,
     transaction_source_hash,
 )
+
+
+def test_group_transactions_sums_same_merchants() -> None:
+    """同じ利用会社の金額と件数をまとめられることを確認する。
+    Args:
+        なし。
+    Returns:
+        なし。
+    """
+    rows = [
+        {"id": 1, "used_at": datetime(2026, 8, 1), "merchant": "スーパー 東店", "amount": 800, "category": "食費"},
+        {"id": 2, "used_at": datetime(2026, 8, 2), "merchant": "スーパー 西店", "amount": 1200, "category": "食費"},
+        {"id": 3, "used_at": datetime(2026, 8, 3), "merchant": "書店", "amount": 500, "category": "娯楽"},
+    ]
+
+    grouped = group_transactions(rows, "amount", "desc")
+
+    assert grouped[0]["merchant"] == "スーパー"
+    assert grouped[0]["amount"] == 2000
+    assert grouped[0]["count"] == 2
+
+
+def test_group_transactions_marks_mixed_categories() -> None:
+    """同じ利用会社でカテゴリが混在する場合を表示できることを確認する。
+    Args:
+        なし。
+    Returns:
+        なし。
+    """
+    rows = [
+        {"id": 1, "used_at": datetime(2026, 8, 1), "merchant": "店舗", "amount": 800, "category": "食費"},
+        {"id": 2, "used_at": datetime(2026, 8, 2), "merchant": "店舗", "amount": 1200, "category": "日用品"},
+    ]
+
+    grouped = group_transactions(rows, "date", "desc")
+
+    assert grouped[0]["category"] == "複数"
 
 
 def test_transaction_source_hash_uses_row_index() -> None:
