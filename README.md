@@ -1,3 +1,5 @@
+💻 **ローカルWebアプリの接続先：起動時にコンソールへ表示されるURL** — `start.bat`で起動したPC内で利用できます。ポートは`config/config.json`の`server.port`に保存されるため、固定URLではありません。
+
 # Kakeibo DX
 
 ## 概要
